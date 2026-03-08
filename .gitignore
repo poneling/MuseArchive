@@ -1,0 +1,30 @@
+# ===== BACKEND (.NET) =====
+backend/**/bin/
+backend/**/obj/
+backend/**/*.user
+backend/**/*.suo
+backend/**/.vs/
+backend/**/appsettings.Development.json
+
+# ===== FRONTEND (Node.js / React) =====
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/.env
+frontend/.env.local
+
+# ===== DATABASE =====
+*.mdf
+*.ldf
+*.db
+*.sqlite
+
+# ===== GENEL =====
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+
+# ===== DOK\xdcMANLAR (iste\u011fe ba\u011fl\u0131) =====
+# PROJE_ANALIZ_RAPORU.md
+# SONRAKI_GELISTIRICI_ICIN.md
