@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using MuseArchive.API.Data;
 
@@ -11,9 +12,11 @@ using MuseArchive.API.Data;
 namespace MuseArchive.API.Migrations
 {
     [DbContext(typeof(MuseArchiveDbContext))]
-    partial class MuseArchiveDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260308141257_AddUserFavoriteArtist")]
+    partial class AddUserFavoriteArtist
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

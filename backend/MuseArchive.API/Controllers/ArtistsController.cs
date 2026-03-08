@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using MuseArchive.API.Data;
 using MuseArchive.API.Models;
+using MuseArchive.API.Services;
 
 namespace MuseArchive.API.Controllers
 {
@@ -10,10 +11,12 @@ namespace MuseArchive.API.Controllers
     public class ArtistsController : ControllerBase
     {
         private readonly MuseArchiveDbContext _context;
+        private readonly ArtistWikiService _wiki;
 
-        public ArtistsController(MuseArchiveDbContext context)
+        public ArtistsController(MuseArchiveDbContext context, ArtistWikiService wiki)
         {
             _context = context;
+            _wiki    = wiki;
         }
 
         // GET: api/Artists
@@ -99,9 +102,71 @@ namespace MuseArchive.API.Controllers
             return NoContent();
         }
 
+        // GET: api/Artists/{id}/wiki
+        [HttpGet("{id}/wiki")]
+        public async Task<IActionResult> GetArtistWiki(int id)
+        {
+            var bio = await _wiki.GetOrFetchBioAsync(id);
+            if (bio == null) return NotFound(new { message = "Artist not found." });
+            return Ok(new { bio });
+        }
+
+        // GET: api/Artists/Followed?userId=5
+        [HttpGet("Followed")]
+        public async Task<IActionResult> GetFollowedArtists([FromQuery] int userId)
+        {
+            var artists = await _context.UserFavoriteArtists
+                .Where(ua => ua.UserId == userId)
+                .Include(ua => ua.Artist)
+                .Select(ua => ua.Artist)
+                .ToListAsync();
+            return Ok(artists);
+        }
+
+        // GET: api/Artists/{id}/IsFollowed?userId=5
+        [HttpGet("{id}/IsFollowed")]
+        public async Task<IActionResult> IsFollowed(int id, [FromQuery] int userId)
+        {
+            var followed = await _context.UserFavoriteArtists
+                .AnyAsync(ua => ua.UserId == userId && ua.ArtistId == id);
+            return Ok(new { followed });
+        }
+
+        // POST: api/Artists/{id}/Follow
+        [HttpPost("{id}/Follow")]
+        public async Task<IActionResult> Follow(int id, [FromBody] UserActionRequest req)
+        {
+            if (!await _context.Artists.AnyAsync(a => a.Id == id))
+                return NotFound(new { message = "Artist not found." });
+
+            if (await _context.UserFavoriteArtists.AnyAsync(ua => ua.UserId == req.UserId && ua.ArtistId == id))
+                return Conflict(new { message = "Already following." });
+
+            _context.UserFavoriteArtists.Add(new UserFavoriteArtist { UserId = req.UserId, ArtistId = id });
+            await _context.SaveChangesAsync();
+            return Ok(new { message = "Followed." });
+        }
+
+        // DELETE: api/Artists/{id}/Unfollow?userId=5
+        [HttpDelete("{id}/Unfollow")]
+        public async Task<IActionResult> Unfollow(int id, [FromQuery] int userId)
+        {
+            var entry = await _context.UserFavoriteArtists
+                .FirstOrDefaultAsync(ua => ua.UserId == userId && ua.ArtistId == id);
+            if (entry == null) return NotFound();
+            _context.UserFavoriteArtists.Remove(entry);
+            await _context.SaveChangesAsync();
+            return NoContent();
+        }
+
         private bool ArtistExists(int id)
         {
             return _context.Artists.Any(e => e.Id == id);
         }
+    }
+
+    public class UserActionRequest
+    {
+        public int UserId { get; set; }
     }
 }

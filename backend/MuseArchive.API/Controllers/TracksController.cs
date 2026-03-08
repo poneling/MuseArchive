@@ -73,6 +73,20 @@ namespace MuseArchive.API.Controllers
                 .ToListAsync();
         }
 
+        // GET: api/Tracks/ByGenre/rock
+        [HttpGet("ByGenre/{genre}")]
+        public async Task<ActionResult<IEnumerable<Track>>> GetTracksByGenre(string genre)
+        {
+            return await _context.Tracks
+                .Where(t => t.Genre != null && t.Genre.ToLower().Contains(genre.ToLower()))
+                .Include(t => t.Album)
+                .ThenInclude(a => a.Artist)
+                .Include(t => t.TrackArtists)
+                .ThenInclude(ta => ta.Artist)
+                .OrderBy(t => t.Title)
+                .ToListAsync();
+        }
+
         // POST: api/Tracks
         [HttpPost]
         public async Task<ActionResult<Track>> CreateTrack(Track track)

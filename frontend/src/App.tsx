@@ -3,7 +3,10 @@ import Layout from './components/Layout'
 import Home from './pages/Home'
 import Search from './pages/Search'
 import Library from './pages/Library'
-import ArtistWiki from './pages/ArtistWiki'
+import ArtistPage from './pages/ArtistPage'
+import AlbumPage from './pages/AlbumPage'
+import PlaylistPage from './pages/PlaylistPage'
+import LikedSongsPage from './pages/LikedSongsPage'
 
 function App() {
   return (
@@ -13,7 +16,10 @@ function App() {
           <Route path="/" element={<Home />} />
           <Route path="/search" element={<Search />} />
           <Route path="/library" element={<Library />} />
-          <Route path="/artist/:id" element={<ArtistWiki />} />
+          <Route path="/artist/:id" element={<ArtistPage />} />
+          <Route path="/album/:id" element={<AlbumPage />} />
+          <Route path="/playlist/:id" element={<PlaylistPage />} />
+          <Route path="/liked" element={<LikedSongsPage />} />
         </Routes>
       </Layout>
     </div>

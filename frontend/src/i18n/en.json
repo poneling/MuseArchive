@@ -1,0 +1,70 @@
+{
+  "nav": {
+    "home": "Home",
+    "search": "Search",
+    "library": "Library"
+  },
+  "sidebar": {
+    "yourLibrary": "Your Library",
+    "likedSongs": "Liked Songs",
+    "login": "Log in",
+    "logout": "Log out"
+  },
+  "home": {
+    "goodMorning": "Good morning",
+    "goodAfternoon": "Good afternoon",
+    "goodEvening": "Good evening",
+    "recentlyPlayed": "Recently played",
+    "likedSongs": "Liked songs",
+    "albums": "Albums",
+    "allTracks": "All tracks",
+    "loading": "Loading your music library…"
+  },
+  "search": {
+    "title": "Search",
+    "placeholder": "Artists, songs, albums…",
+    "noResults": "No results for",
+    "songs": "Songs",
+    "artists": "Artists",
+    "albums": "Albums",
+    "browseCategories": "Browse Categories",
+    "playAll": "Play all"
+  },
+  "player": {
+    "noTrack": "No track playing",
+    "unknown": "—"
+  },
+  "artist": {
+    "about": "About",
+    "popular": "Popular",
+    "albums": "Albums",
+    "artist": "Artist",
+    "tracks": "tracks",
+    "loading": "Loading…",
+    "notFound": "Artist not found."
+  },
+  "album": {
+    "album": "Album",
+    "songs": "songs",
+    "loading": "Loading…",
+    "notFound": "Album not found."
+  },
+  "auth": {
+    "login": "Log in",
+    "signup": "Sign up",
+    "loginTitle": "Log in to MuseArchive",
+    "registerTitle": "Create an account",
+    "usernameOrEmail": "Username or email",
+    "username": "Username",
+    "email": "Email",
+    "password": "Password",
+    "enterUsernameOrEmail": "Enter username or email",
+    "chooseUsername": "Choose a username",
+    "noAccount": "Don't have an account?",
+    "hasAccount": "Already have an account?"
+  },
+  "language": {
+    "en": "EN",
+    "tr": "TR"
+  }
+}

@@ -19,6 +19,7 @@ namespace MuseArchive.API.Data
         public DbSet<PlaylistTrack> PlaylistTracks { get; set; }
         public DbSet<UserPlaylist> UserPlaylists { get; set; }
         public DbSet<UserFavoriteTrack> UserFavoriteTracks { get; set; }
+        public DbSet<UserFavoriteArtist> UserFavoriteArtists { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -118,6 +119,23 @@ namespace MuseArchive.API.Data
                       .HasForeignKey(up => up.PlaylistId)
                       .OnDelete(DeleteBehavior.Restrict);
 
+                entity.Property(e => e.FollowedAt).HasDefaultValueSql("GETUTCDATE()");
+            });
+
+            // UserFavoriteArtist relationship
+            modelBuilder.Entity<UserFavoriteArtist>(entity =>
+            {
+                entity.HasOne(ua => ua.User)
+                      .WithMany()
+                      .HasForeignKey(ua => ua.UserId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(ua => ua.Artist)
+                      .WithMany()
+                      .HasForeignKey(ua => ua.ArtistId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(ua => new { ua.UserId, ua.ArtistId }).IsUnique();
                 entity.Property(e => e.FollowedAt).HasDefaultValueSql("GETUTCDATE()");
             });
 

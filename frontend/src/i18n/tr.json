@@ -1,0 +1,70 @@
+{
+  "nav": {
+    "home": "Ana Sayfa",
+    "search": "Keşfet",
+    "library": "Kütüphane"
+  },
+  "sidebar": {
+    "yourLibrary": "Kütüphaneniz",
+    "likedSongs": "Beğenilen Şarkılar",
+    "login": "Giriş Yap",
+    "logout": "Çıkış Yap"
+  },
+  "home": {
+    "goodMorning": "Günaydın",
+    "goodAfternoon": "İyi öğleden sonralar",
+    "goodEvening": "İyi akşamlar",
+    "recentlyPlayed": "Son çalınanlar",
+    "likedSongs": "Beğenilen şarkılar",
+    "albums": "Albümler",
+    "allTracks": "Tüm şarkılar",
+    "loading": "Müzik kütüphaneniz yükleniyor…"
+  },
+  "search": {
+    "title": "Keşfet",
+    "placeholder": "Sanatçı, şarkı, albüm…",
+    "noResults": "Sonuç bulunamadı:",
+    "songs": "Şarkılar",
+    "artists": "Sanatçılar",
+    "albums": "Albümler",
+    "browseCategories": "Kategorilere Göz At",
+    "playAll": "Tümünü çal"
+  },
+  "player": {
+    "noTrack": "Çalan parça yok",
+    "unknown": "—"
+  },
+  "artist": {
+    "about": "Hakkında",
+    "popular": "Popüler",
+    "albums": "Albümler",
+    "artist": "Sanatçı",
+    "tracks": "şarkı",
+    "loading": "Yükleniyor…",
+    "notFound": "Sanatçı bulunamadı."
+  },
+  "album": {
+    "album": "Albüm",
+    "songs": "şarkı",
+    "loading": "Yükleniyor…",
+    "notFound": "Albüm bulunamadı."
+  },
+  "auth": {
+    "login": "Giriş Yap",
+    "signup": "Kayıt Ol",
+    "loginTitle": "MuseArchive'e Giriş Yap",
+    "registerTitle": "Hesap Oluştur",
+    "usernameOrEmail": "Kullanıcı adı veya e-posta",
+    "username": "Kullanıcı adı",
+    "email": "E-posta",
+    "password": "Şifre",
+    "enterUsernameOrEmail": "Kullanıcı adı veya e-posta girin",
+    "chooseUsername": "Bir kullanıcı adı seçin",
+    "noAccount": "Hesabınız yok mu?",
+    "hasAccount": "Zaten hesabınız var mı?"
+  },
+  "language": {
+    "en": "EN",
+    "tr": "TR"
+  }
+}

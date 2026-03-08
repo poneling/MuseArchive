@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using MuseArchive.API.Data;
 using MuseArchive.API.Models;
 using TagLib;
@@ -19,255 +19,260 @@ public class MusicLibraryScanner
         _musicPath = @"C:\Users\poneling\Desktop\proje\music";
     }
 
+    // â”€â”€â”€ PUBLIC ENTRY POINT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
     public async Task ScanAndImportMusicLibraryAsync()
     {
         if (!Directory.Exists(_musicPath))
         {
-            _logger.LogWarning($"Music directory not found: {_musicPath}");
+            _logger.LogWarning("Music directory not found: {Path}", _musicPath);
             return;
         }
 
-        _logger.LogInformation($"Starting music library scan at: {_musicPath}");
+        _logger.LogInformation("Starting music library scan at: {Path}", _musicPath);
 
-        var artistAlbumDirectories = Directory.GetDirectories(_musicPath);
+        var allMp3s = Directory.GetFiles(_musicPath, "*.mp3", SearchOption.AllDirectories);
+        _logger.LogInformation("Found {Count} MP3 files", allMp3s.Length);
 
-        foreach (var artistAlbumDir in artistAlbumDirectories)
+        foreach (var mp3 in allMp3s)
         {
             try
             {
-                await ProcessArtistAlbumDirectory(artistAlbumDir);
-                
-                // Save changes after each directory to avoid conflicts
-                await _context.SaveChangesAsync();
+                await ProcessAndOrganizeAsync(mp3);
             }
             catch (Exception ex)
             {
-                _logger.LogError($"Error processing directory {artistAlbumDir}: {ex.Message}");
-                
-                // Clear changes to avoid conflicts
-                _context.ChangeTracker.Clear();
+                _logger.LogError("Failed to process {File}: {Msg}", mp3, ex.Message);
             }
         }
 
+        CleanEmptyDirectories(_musicPath);
         _logger.LogInformation("Music library scan completed");
     }
 
-    private async Task ProcessArtistAlbumDirectory(string artistAlbumDir)
+    // â”€â”€â”€ CORE: READ TAGS â†’ MOVE FILE â†’ SAVE DB â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+    private async Task ProcessAndOrganizeAsync(string originalPath)
     {
-        var dirName = Path.GetFileName(artistAlbumDir);
-        var artistName = "Unknown Artist";
-        var albumName = "Unknown Album";
+        // 1. Read ID3 tags — AlbumArtists has priority over Performers
+        string tagArtist, tagAlbum, tagTitle, tagGenre;
+        TimeSpan duration;
+        byte[]? coverData = null;
 
         try
         {
-            // Try different parsing strategies
-            if (dirName.Contains(" - "))
-            {
-                var parts = dirName.Split(new[] { " - " }, StringSplitOptions.RemoveEmptyEntries);
-                if (parts.Length >= 2)
-                {
-                    artistName = parts[0].Trim();
-                    albumName = parts[1].Trim();
-                }
-            }
-            else if (dirName.Contains(" -"))
-            {
-                var parts = dirName.Split(new[] { " -" }, StringSplitOptions.RemoveEmptyEntries);
-                if (parts.Length >= 2)
-                {
-                    artistName = parts[0].Trim();
-                    albumName = parts[1].Trim();
-                }
-            }
-            else if (dirName.Contains("- "))
-            {
-                var parts = dirName.Split(new[] { "- " }, StringSplitOptions.RemoveEmptyEntries);
-                if (parts.Length >= 2)
-                {
-                    artistName = parts[0].Trim();
-                    albumName = parts[1].Trim();
-                }
-            }
-            else if (dirName.Contains("-"))
-            {
-                var parts = dirName.Split(new[] { "-" }, StringSplitOptions.RemoveEmptyEntries);
-                if (parts.Length >= 2)
-                {
-                    artistName = parts[0].Trim();
-                    albumName = parts[1].Trim();
-                }
-            }
-            else
-            {
-                // If no separator found, use directory name as album
-                albumName = dirName;
-            }
+            using var tagFile = TagLib.File.Create(originalPath);
+            var tag = tagFile.Tag;
 
-            // Clean up artist and album names (remove special characters)
-            artistName = CleanName(artistName);
-            albumName = CleanName(albumName);
+            // AlbumArtists first — more reliable for multi-artist / compiled albums
+            tagArtist = FirstNonEmpty(
+                tag.AlbumArtists?.FirstOrDefault(a => !string.IsNullOrWhiteSpace(a)),
+                tag.Performers?.FirstOrDefault(a => !string.IsNullOrWhiteSpace(a)));
 
-            _logger.LogInformation($"Processing: {dirName} -> Artist: {artistName}, Album: {albumName}");
+            tagAlbum  = tag.Album ?? "";
+            tagTitle  = string.IsNullOrWhiteSpace(tag.Title)
+                            ? Path.GetFileNameWithoutExtension(originalPath)
+                            : tag.Title;
+            tagGenre  = tag.FirstGenre ?? "";
+            duration  = tagFile.Properties.Duration;
 
-            // Create or get artist
-            var artist = await GetOrCreateArtistAsync(artistName);
-
-            // Create or get album
-            var album = await GetOrCreateAlbumAsync(albumName, artist.Id);
-
-            // Process MP3 files
-            var mp3Files = Directory.GetFiles(artistAlbumDir, "*.mp3", SearchOption.AllDirectories);
-            
-            foreach (var mp3File in mp3Files)
-            {
-                await ProcessTrackAsync(mp3File, album, artist);
-            }
+            // Extract embedded cover art (FrontCover preferred)
+            var pic = tag.Pictures?.FirstOrDefault(p => p.Type == TagLib.PictureType.FrontCover)
+                   ?? tag.Pictures?.FirstOrDefault();
+            if (pic?.Data?.Data?.Length > 0)
+                coverData = pic.Data.Data;
         }
         catch (Exception ex)
         {
-            _logger.LogError($"Error processing directory {artistAlbumDir}: {ex.Message}");
-            
-            // Fallback: create unknown artist/album and still process files
+            _logger.LogWarning("Cannot read tags for {File}: {Msg}", originalPath, ex.Message);
+            tagArtist = "";
+            tagAlbum  = "";
+            tagTitle  = Path.GetFileNameWithoutExtension(originalPath);
+            tagGenre  = "";
+            duration  = TimeSpan.FromSeconds(180);
+        }
+
+        // 2. Fallback to folder-name parsing when tags are empty
+        if (string.IsNullOrWhiteSpace(tagArtist) || string.IsNullOrWhiteSpace(tagAlbum))
+        {
+            var (fa, fb) = ParseFromFolderPath(originalPath);
+            if (string.IsNullOrWhiteSpace(tagArtist)) tagArtist = fa;
+            if (string.IsNullOrWhiteSpace(tagAlbum))  tagAlbum  = fb;
+        }
+
+        if (string.IsNullOrWhiteSpace(tagArtist)) tagArtist = "Unknown Artist";
+        if (string.IsNullOrWhiteSpace(tagAlbum))  tagAlbum  = "Unknown Album";
+
+        // 3. Build clean target path
+        var cleanArtist = CleanPathName(tagArtist);
+        var cleanAlbum  = CleanPathName(tagAlbum);
+        var targetDir   = Path.Combine(_musicPath, cleanArtist, cleanAlbum);
+        var targetFile  = Path.Combine(targetDir, Path.GetFileName(originalPath));
+
+        // 4. Physically move the file if it's not already there
+        string finalPath = originalPath;
+        if (!string.Equals(originalPath, targetFile, StringComparison.OrdinalIgnoreCase))
+        {
+            Directory.CreateDirectory(targetDir);
+
+            // Avoid collision
+            if (System.IO.File.Exists(targetFile))
+            {
+                var stem = Path.GetFileNameWithoutExtension(originalPath);
+                var ext  = Path.GetExtension(originalPath);
+                targetFile = Path.Combine(targetDir, $"{stem}_{Guid.NewGuid().ToString("N")[..4]}{ext}");
+            }
+
+            System.IO.File.Move(originalPath, targetFile, overwrite: false);
+            finalPath = targetFile;
+            _logger.LogInformation("Moved â†’ {Target}", Path.GetRelativePath(_musicPath, targetFile));
+        }
+
+        // 5. Save cover.jpg into the album folder (if embedded art exists)
+        var coverPath = Path.Combine(targetDir, "cover.jpg");
+        if (coverData != null && !System.IO.File.Exists(coverPath))
+        {
             try
             {
-                var fallbackArtist = await GetOrCreateArtistAsync("Unknown Artist");
-                var fallbackAlbum = await GetOrCreateAlbumAsync("Unknown Album", fallbackArtist.Id);
-                
-                var mp3Files = Directory.GetFiles(artistAlbumDir, "*.mp3", SearchOption.AllDirectories);
-                foreach (var mp3File in mp3Files)
+                await System.IO.File.WriteAllBytesAsync(coverPath, coverData);
+                _logger.LogInformation("Saved cover art for {Album}", cleanAlbum);
+            }
+            catch (Exception ex) { _logger.LogWarning("Cover save failed: {Msg}", ex.Message); }
+        }
+        string? coverImageUrl = System.IO.File.Exists(coverPath)
+            ? "/music/" + cleanArtist + "/" + cleanAlbum + "/cover.jpg"
+            : null;
+
+        // 6. Build audioUrl relative to music root
+        var relative = Path.GetRelativePath(_musicPath, finalPath).Replace("\\", "/");
+        var audioUrl = "/music/" + relative;
+
+        // 7. Skip DB insert if track already exists
+        if (await _context.Tracks.AnyAsync(t => t.AudioUrl == audioUrl))
+        {
+            // Still update cover URL if we just extracted one
+            if (coverImageUrl != null)
+            {
+                var existingAlbum = await _context.Albums
+                    .FirstOrDefaultAsync(a => a.Title.ToLower() == cleanAlbum.ToLower() && a.ArtistId != 0);
+                if (existingAlbum != null && existingAlbum.CoverImageUrl == null)
                 {
-                    await ProcessTrackAsync(mp3File, fallbackAlbum, fallbackArtist);
+                    existingAlbum.CoverImageUrl = coverImageUrl;
+                    await _context.SaveChangesAsync();
                 }
             }
-            catch (Exception fallbackEx)
-            {
-                _logger.LogError($"Fallback processing failed for {artistAlbumDir}: {fallbackEx.Message}");
-            }
-        }
-    }
-
-    private string CleanName(string name)
-    {
-        if (string.IsNullOrWhiteSpace(name)) return "Unknown";
-
-        name = name.Trim();
-
-        // If name is just empty brackets like "()" → use "Unknown"
-        if (string.IsNullOrWhiteSpace(name.Replace("(", "").Replace(")", "").Replace("-", "").Replace("_", "")))
-            return "Unknown";
-
-        // Truncate to max DB field length (200 chars)
-        if (name.Length > 200)
-            name = name.Substring(0, 200);
-
-        return name;
-    }
-
-    private async Task<Artist> GetOrCreateArtistAsync(string artistName)
-    {
-        var artist = await _context.Artists
-            .FirstOrDefaultAsync(a => a.Name.ToLower() == artistName.ToLower());
-
-        if (artist == null)
-        {
-            artist = new Artist
-            {
-                Name = artistName,
-                Bio = $"Biography of {artistName}",
-                ImageUrl = "/images/default-artist.jpg"
-            };
-
-            _context.Artists.Add(artist);
-            await _context.SaveChangesAsync();
-            _logger.LogInformation($"Created new artist: {artistName}");
-        }
-
-        return artist;
-    }
-
-    private async Task<Album> GetOrCreateAlbumAsync(string albumName, int artistId)
-    {
-        var album = await _context.Albums
-            .FirstOrDefaultAsync(a => a.Title.ToLower() == albumName.ToLower() && a.ArtistId == artistId);
-
-        if (album == null)
-        {
-            album = new Album
-            {
-                Title = albumName,
-                ArtistId = artistId,
-                ReleaseDate = DateTime.Now,
-                CoverImageUrl = "/images/default-album.jpg"
-            };
-
-            _context.Albums.Add(album);
-            await _context.SaveChangesAsync();
-            _logger.LogInformation($"Created new album: {albumName}");
-        }
-
-        return album;
-    }
-
-    private async Task ProcessTrackAsync(string mp3FilePath, Album album, Artist artist)
-    {
-        var mp3FileName = Path.GetFileName(mp3FilePath);
-        var fileName = Path.GetFileNameWithoutExtension(mp3FilePath);
-
-        // Build audioUrl from actual filesystem path relative to music root
-        var relativePath = Path.GetRelativePath(_musicPath, mp3FilePath).Replace("\\", "/");
-        var audioUrl = "/music/" + relativePath;
-        var existingTrack = await _context.Tracks
-            .FirstOrDefaultAsync(t => t.AudioUrl != null && t.AudioUrl == audioUrl);
-
-        if (existingTrack != null)
-        {
-            _logger.LogDebug($"Track already exists: {fileName}");
             return;
         }
 
-        // Read MP3 metadata
-        Track track;
-        try
+        // 8. Upsert Artist / Album
+        var artist = await GetOrCreateArtistAsync(cleanArtist);
+        var album  = await GetOrCreateAlbumAsync(cleanAlbum, artist.Id, coverImageUrl);
+
+        // 9. Insert Track
+        var track = new Track
         {
-            using (var file = TagLib.File.Create(mp3FilePath))
+            Title    = tagTitle,
+            Duration = duration,
+            AlbumId  = album.Id,
+            AudioUrl = audioUrl,
+            Genre    = string.IsNullOrWhiteSpace(tagGenre) ? null : tagGenre[..Math.Min(tagGenre.Length, 100)],
+            PlayCount = 0
+        };
+        _context.Tracks.Add(track);
+        await _context.SaveChangesAsync();
+
+        _context.TrackArtists.Add(new TrackArtist { TrackId = track.Id, ArtistId = artist.Id }); // 10. Link artist
+        await _context.SaveChangesAsync();
+
+        _logger.LogInformation("Saved: {Title} [{Artist} â€“ {Album}]", tagTitle, cleanArtist, cleanAlbum);
+    }
+
+    // â”€â”€â”€ HELPERS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+    private static string FirstNonEmpty(params string?[] values)
+        => values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)) ?? "";
+
+    private (string artist, string album) ParseFromFolderPath(string filePath)
+    {
+        var relative = Path.GetRelativePath(_musicPath, filePath);
+        var parts    = relative.Split(Path.DirectorySeparatorChar);
+
+        if (parts.Length >= 3)
+            return (parts[0], parts[1]);
+
+        if (parts.Length == 2)
+        {
+            var dir = parts[0];
+            if (dir.Contains(" - "))
             {
-                var tag = file.Tag;
-                track = new Track
-                {
-                    Title = string.IsNullOrEmpty(tag.Title) ? fileName : tag.Title,
-                    Duration = file.Properties.Duration,
-                    AlbumId = album.Id,
-                    AudioUrl = audioUrl,
-                    PlayCount = 0
-                };
+                var sp = dir.Split(new[] { " - " }, 2, StringSplitOptions.None);
+                return (sp[0].Trim(), sp[1].Trim());
+            }
+            return (dir, dir);
+        }
+        return ("Unknown Artist", "Unknown Album");
+    }
+
+    private static string CleanPathName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return "Unknown";
+        var invalid  = Path.GetInvalidFileNameChars();
+        var cleaned  = new string(name.Where(c => !invalid.Contains(c)).ToArray()).Trim().TrimEnd('.');
+        if (cleaned.Length > 100) cleaned = cleaned[..100].Trim();
+        return string.IsNullOrWhiteSpace(cleaned) ? "Unknown" : cleaned;
+    }
+
+    private void CleanEmptyDirectories(string root)
+    {
+        foreach (var dir in Directory.GetDirectories(root, "*", SearchOption.AllDirectories)
+                                     .OrderByDescending(d => d.Length))
+        {
+            if (!Directory.EnumerateFileSystemEntries(dir).Any())
+            {
+                try { Directory.Delete(dir); } catch { /* ignore locked dirs */ }
             }
         }
-        catch (Exception ex)
+    }
+
+    private async Task<Artist> GetOrCreateArtistAsync(string name)
+    {
+        var artist = await _context.Artists
+            .FirstOrDefaultAsync(a => a.Name.ToLower() == name.ToLower());
+
+        if (artist != null) return artist;
+
+        artist = new Artist { Name = name, Bio = $"Biography of {name}", ImageUrl = "/images/default-artist.jpg" };
+        _context.Artists.Add(artist);
+        await _context.SaveChangesAsync();
+        return artist;
+    }
+
+    private async Task<Album> GetOrCreateAlbumAsync(string title, int artistId, string? coverImageUrl = null)
+    {
+        var album = await _context.Albums
+            .FirstOrDefaultAsync(a => a.Title.ToLower() == title.ToLower() && a.ArtistId == artistId);
+
+        if (album != null)
         {
-            _logger.LogWarning($"Could not read metadata for {mp3FilePath}: {ex.Message}. Using filename as title.");
-            track = new Track
+            // Update cover if we have a real one now
+            if (coverImageUrl != null && album.CoverImageUrl == null)
             {
-                Title = fileName,
-                Duration = TimeSpan.FromSeconds(180),
-                AlbumId = album.Id,
-                AudioUrl = audioUrl,
-                PlayCount = 0
-            };
+                album.CoverImageUrl = coverImageUrl;
+                await _context.SaveChangesAsync();
+            }
+            return album;
         }
 
-        _context.Tracks.Add(track);
-        // Save first so track.Id is generated before creating TrackArtist
-        await _context.SaveChangesAsync();
-
-        // Create TrackArtist relationship (track.Id is now valid)
-        var trackArtist = new TrackArtist
+        album = new Album
         {
-            TrackId = track.Id,
-            ArtistId = artist.Id
+            Title         = title,
+            ArtistId      = artistId,
+            ReleaseDate   = DateTime.UtcNow,
+            CoverImageUrl = coverImageUrl,
         };
-        _context.TrackArtists.Add(trackArtist);
+        _context.Albums.Add(album);
         await _context.SaveChangesAsync();
-
-        _logger.LogInformation($"Created new track: {track.Title}");
+        return album;
     }
+
 }

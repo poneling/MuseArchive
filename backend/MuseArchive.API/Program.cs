@@ -1,7 +1,10 @@
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using MuseArchive.API.Data;
 using MuseArchive.API.Services;
 using Microsoft.Extensions.FileProviders;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -21,6 +24,27 @@ builder.Services.AddDbContext<MuseArchiveDbContext>(options =>
 
 // Add Music Library Scanner as scoped service
 builder.Services.AddScoped<MusicLibraryScanner>();
+
+// Add HttpClient for external API calls (Wikipedia)
+builder.Services.AddHttpClient();
+builder.Services.AddScoped<ArtistWikiService>();
+
+// Configure JWT Authentication
+var jwtSecret = builder.Configuration["Jwt:Secret"] ?? "MuseArchive_SuperSecret_JWT_Key_2026_ChangeInProd!";
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer           = true,
+            ValidateAudience         = true,
+            ValidateLifetime         = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer              = "MuseArchive",
+            ValidAudience            = "MuseArchive",
+            IssuerSigningKey         = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
+        };
+    });
 
 // Add CORS
 builder.Services.AddCors(options =>
@@ -43,6 +67,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors("AllowFrontend");
+app.UseAuthentication();
 
 // Add static files for music folder
 var musicPath = @"C:\Users\poneling\Desktop\proje\music";
@@ -59,9 +84,12 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-// Scan music library on startup
+// Apply pending EF migrations and scan music library on startup
 using (var scope = app.Services.CreateScope())
 {
+    var db = scope.ServiceProvider.GetRequiredService<MuseArchiveDbContext>();
+    await db.Database.MigrateAsync();
+
     var scanner = scope.ServiceProvider.GetRequiredService<MusicLibraryScanner>();
     await scanner.ScanAndImportMusicLibraryAsync();
 }

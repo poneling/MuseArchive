@@ -10,19 +10,17 @@ const api = axios.create({
   },
 });
 
-// Request interceptor
+// Request interceptor — reads JWT from Zustand persist store
 api.interceptors.request.use(
   (config) => {
-    // Add auth token if available
-    const token = localStorage.getItem('authToken');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
+    try {
+      const raw = localStorage.getItem('musearchive-auth');
+      const token = raw ? JSON.parse(raw)?.token : null;
+      if (token) config.headers.Authorization = `Bearer ${token}`;
+    } catch { /* ignore parse errors */ }
     return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
 
 // Response interceptor
@@ -40,6 +38,19 @@ export const artistsService = {
   create: (data: any) => api.post('/artists', data),
   update: (id: number, data: any) => api.put(`/artists/${id}`, data),
   delete: (id: number) => api.delete(`/artists/${id}`),
+  getFollowed: (userId: number) => api.get(`/artists/followed?userId=${userId}`),
+  isFollowed: (artistId: number, userId: number) => api.get(`/artists/${artistId}/isfollowed?userId=${userId}`),
+  follow: (artistId: number, userId: number) => api.post(`/artists/${artistId}/follow`, { userId }),
+  unfollow: (artistId: number, userId: number) => api.delete(`/artists/${artistId}/unfollow?userId=${userId}`),
+  getWiki: (artistId: number) => api.get(`/artists/${artistId}/wiki`),
+};
+
+export const authService = {
+  login: (usernameOrEmail: string, password: string) => api.post('/auth/login', { usernameOrEmail, password }),
+  register: (username: string, email: string, password: string) => api.post('/auth/register', { username, email, password }),
+  getFavorites: () => api.get('/auth/favorites'),
+  addFavorite: (trackId: number) => api.post(`/auth/favorites/${trackId}`, {}),
+  removeFavorite: (trackId: number) => api.delete(`/auth/favorites/${trackId}`),
 };
 
 export const albumsService = {
@@ -56,6 +67,7 @@ export const tracksService = {
   getById: (id: number) => api.get(`/tracks/${id}`),
   getByAlbum: (albumId: number) => api.get(`/tracks/byalbum/${albumId}`),
   getByArtist: (artistId: number) => api.get(`/tracks/byartist/${artistId}`),
+  getByGenre: (genre: string) => api.get(`/tracks/bygenre/${encodeURIComponent(genre)}`),
   create: (data: any) => api.post('/tracks', data),
   update: (id: number, data: any) => api.put(`/tracks/${id}`, data),
   delete: (id: number) => api.delete(`/tracks/${id}`),

@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom'
 import { Music, Calendar, Globe, Users } from 'lucide-react'
 
 const ArtistWiki: React.FC = () => {
-  const { id } = useParams<{ id: string }>()
+  const { id: _id } = useParams<{ id: string }>()
 
   return (
     <div className="space-y-8">
