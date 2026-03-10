@@ -75,7 +75,7 @@ const PlaylistPage: React.FC = () => {
   const handleRename = async () => {
     if (!newName.trim() || !playlist) return
     try {
-      await playlistsService.update(playlist.id, { ...playlist, name: newName.trim() })
+      await playlistsService.update(playlist.id, { name: newName.trim() })
       setPlaylist(prev => prev ? { ...prev, name: newName.trim() } : prev)
       setRenaming(false)
     } catch { /* ignore */ }

@@ -1,10 +1,12 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { Home, Search, Library, Music, Heart, PlusCircle, LogOut, LogIn } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import Player from './Player'
 import LoginModal from './LoginModal'
 import { useAuthStore } from '../store/authStore'
+import { useMusicStore } from '../store/musicStore'
+import { authService } from '../services/api'
 
 interface LayoutProps {
   children: React.ReactNode
@@ -20,7 +22,20 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const location = useLocation()
   const [showLogin, setShowLogin] = useState(false)
   const { user, isAuthenticated, logout } = useAuthStore()
+  const { setFavorites } = useMusicStore()
   const { t, i18n } = useTranslation()
+
+  // On app startup: sync server favorites if already authenticated
+  useEffect(() => {
+    if (!isAuthenticated) return
+    authService.getFavorites()
+      .then(res => {
+        const ids: number[] = (res.data as any[]).map((f: any) => f.id)
+        setFavorites(ids)
+      })
+      .catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated])
 
   const currentLang = i18n.resolvedLanguage ?? i18n.language
   const toggleLang = () => {
@@ -119,10 +134,19 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             {t(`nav.${navItems.find(n => n.href === location.pathname)?.key ?? ''}`, { defaultValue: 'MuseArchive' })}
           </h1>
           <div className="flex items-center gap-2">
-            {/* Login / Avatar — left of language button */}
+            {/* Login / Avatar+Logout */}
             {isAuthenticated && user ? (
-              <div className="w-9 h-9 bg-green-500 rounded-full flex items-center justify-center cursor-pointer" title={user.username}>
-                <span className="text-black font-bold text-sm">{user.username[0].toUpperCase()}</span>
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 bg-green-500 rounded-full flex items-center justify-center" title={user.username}>
+                  <span className="text-black font-bold text-sm">{user.username[0].toUpperCase()}</span>
+                </div>
+                <button
+                  onClick={() => { logout(); window.location.href = '/' }}
+                  className="text-xs font-medium text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-700 px-3 py-1.5 rounded-full transition-colors flex items-center gap-1"
+                >
+                  <LogOut className="w-3 h-3" />
+                  {t('sidebar.logout', { defaultValue: 'Çıkış' })}
+                </button>
               </div>
             ) : (
               <button
@@ -132,13 +156,13 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                 {t('auth.login')}
               </button>
             )}
-            {/* Language switcher — shows CURRENT language; click toggles */}
+            {/* Language switcher — shows TARGET language (what you'll switch to) */}
             <button
               onClick={toggleLang}
-              title={currentLang === 'tr' ? 'Türkçe — İngilizceye geç' : 'English — Switch to Turkish'}
+              title={currentLang === 'tr' ? 'Switch to English' : 'Türkçeye geç'}
               className="text-xs font-bold text-zinc-300 hover:text-white bg-zinc-800 hover:bg-zinc-700 px-2.5 py-1.5 rounded-full transition-colors"
             >
-              {currentLang === 'tr' ? 'TR' : 'EN'}
+              {currentLang === 'tr' ? 'EN' : 'TR'}
             </button>
           </div>
         </header>

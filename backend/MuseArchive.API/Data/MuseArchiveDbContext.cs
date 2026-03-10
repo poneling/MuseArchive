@@ -36,12 +36,14 @@ namespace MuseArchive.API.Data
             // Artist configurations
             modelBuilder.Entity<Artist>(entity =>
             {
+                entity.HasIndex(e => e.Name).IsUnique();
                 entity.Property(e => e.CreatedAt).HasDefaultValueSql("GETUTCDATE()");
             });
 
             // Album configurations
             modelBuilder.Entity<Album>(entity =>
             {
+                entity.HasIndex(e => new { e.Title, e.ArtistId }).IsUnique();
                 entity.Property(e => e.CreatedAt).HasDefaultValueSql("GETUTCDATE()");
                 entity.HasOne(a => a.Artist)
                       .WithMany(ar => ar.Albums)

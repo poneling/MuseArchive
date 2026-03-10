@@ -13,6 +13,7 @@ interface ApiTrack {
   duration: string
   audioUrl?: string
   genre?: string
+  playCount?: number
   album: { id: number; title: string; coverImageUrl?: string; artist: { id: number; name: string } }
 }
 
@@ -64,6 +65,7 @@ const ArtistPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null)
   const [followed, setFollowed] = useState(false)
   const [followLoading, setFollowLoading] = useState(false)
+  const [showAllTracks, setShowAllTracks] = useState(false)
 
   const { playTrack, currentTrack, isPlaying, toggleFavorite, isFavorite } = useMusicStore()
   const { user, isAuthenticated } = useAuthStore()
@@ -189,14 +191,15 @@ const ArtistPage: React.FC = () => {
           <div>
             <h2 className="text-xl font-bold text-white mb-4">Popular</h2>
             <div className="space-y-1">
-              {mappedTracks.slice(0, 20).map((track, i) => {
-                const active = currentTrack?.id === track.id
-                const liked  = isFavorite(track.id)
+              {(showAllTracks ? mappedTracks : mappedTracks.slice(0, 5)).map((track, i) => {
+                const active   = currentTrack?.id === track.id
+                const liked    = isFavorite(track.id)
+                const rawTrack = tracks[i] ?? tracks.find(t => t.id === track.id)
                 return (
                   <div
                     key={track.id}
                     onDoubleClick={() => playTrack(track, mappedTracks)}
-                    className={`grid grid-cols-[32px_1fr_auto_auto_auto] items-center gap-4 px-4 py-2 rounded-lg group cursor-pointer transition-colors ${
+                    className={`grid grid-cols-[32px_1fr_auto_auto_auto_auto] items-center gap-4 px-4 py-2 rounded-lg group cursor-pointer transition-colors ${
                       active ? 'bg-zinc-700' : 'hover:bg-zinc-800'
                     }`}
                   >
@@ -209,6 +212,11 @@ const ArtistPage: React.FC = () => {
                       </p>
                       <p className="text-xs text-zinc-500 truncate">{track.album}</p>
                     </div>
+                    {rawTrack?.playCount != null && rawTrack.playCount > 0 && (
+                      <span className="text-xs text-zinc-500 w-16 text-right opacity-0 group-hover:opacity-100 transition-opacity">
+                        {rawTrack.playCount.toLocaleString()} plays
+                      </span>
+                    )}
                     <button
                       onClick={e => { e.stopPropagation(); toggleFavorite(track.id) }}
                       className={`opacity-0 group-hover:opacity-100 transition-opacity ${liked ? 'text-green-500 !opacity-100' : 'text-zinc-400 hover:text-white'}`}
@@ -223,6 +231,14 @@ const ArtistPage: React.FC = () => {
                 )
               })}
             </div>
+            {mappedTracks.length > 5 && (
+              <button
+                onClick={() => setShowAllTracks(v => !v)}
+                className="mt-3 text-sm text-zinc-400 hover:text-white font-semibold transition-colors"
+              >
+                {showAllTracks ? 'Daha Az Göster ▲' : `Daha Fazla Göster (${mappedTracks.length - 5} daha) ▼`}
+              </button>
+            )}
           </div>
         )}
 

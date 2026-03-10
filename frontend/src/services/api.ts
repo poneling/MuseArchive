@@ -15,7 +15,7 @@ api.interceptors.request.use(
   (config) => {
     try {
       const raw = localStorage.getItem('musearchive-auth');
-      const token = raw ? JSON.parse(raw)?.token : null;
+      const token = raw ? JSON.parse(raw)?.state?.token : null;
       if (token) config.headers.Authorization = `Bearer ${token}`;
     } catch { /* ignore parse errors */ }
     return config;
@@ -63,7 +63,7 @@ export const albumsService = {
 };
 
 export const tracksService = {
-  getAll: () => api.get('/tracks'),
+  getAll: (limit = 200) => api.get('/tracks', { params: { limit } }),
   getById: (id: number) => api.get(`/tracks/${id}`),
   getByAlbum: (albumId: number) => api.get(`/tracks/byalbum/${albumId}`),
   getByArtist: (artistId: number) => api.get(`/tracks/byartist/${artistId}`),
@@ -96,6 +96,8 @@ export const searchService = {
     api.get('/search/tracks', { params: { q: query, limit } }),
   searchPlaylists: (query: string, limit: number = 20) => 
     api.get('/search/playlists', { params: { q: query, limit } }),
+  searchByGenre: (genre: string, limit: number = 30) =>
+    api.get('/search/bygenre', { params: { genre, limit } }),
 };
 
 export default api;

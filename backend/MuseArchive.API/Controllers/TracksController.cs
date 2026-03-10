@@ -18,13 +18,15 @@ namespace MuseArchive.API.Controllers
 
         // GET: api/Tracks
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Track>>> GetTracks()
+        public async Task<ActionResult<IEnumerable<Track>>> GetTracks([FromQuery] int limit = 200)
         {
             return await _context.Tracks
                 .Include(t => t.Album)
                 .ThenInclude(a => a.Artist)
                 .Include(t => t.TrackArtists)
                 .ThenInclude(ta => ta.Artist)
+                .OrderByDescending(t => t.CreatedAt)
+                .Take(Math.Min(limit, 500))
                 .ToListAsync();
         }
 

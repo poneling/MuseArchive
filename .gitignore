@@ -25,6 +25,10 @@ Thumbs.db
 *.log
 *.tmp
 
-# ===== DOK\xdcMANLAR (iste\u011fe ba\u011fl\u0131) =====
+# ===== AI DÖKÜMANLAR (GitHub'a yüklenmez) =====
+AI_CHANGELOG.md
+PROJECT_JOURNEY.md
+
+# ===== DOKÜMANLAR (isteğe bağlı) =====
 # PROJE_ANALIZ_RAPORU.md
 # SONRAKI_GELISTIRICI_ICIN.md

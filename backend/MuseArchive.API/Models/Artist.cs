@@ -18,6 +18,9 @@ namespace MuseArchive.API.Models
         [MaxLength(500)]
         public string? ImageUrl { get; set; }
 
+        [MaxLength(100)]
+        public string? Genre { get; set; }
+
         [MaxLength(200)]
         public string? Country { get; set; }
 

@@ -29,7 +29,7 @@ const LikedSongsPage: React.FC = () => {
   const [loading, setLoading] = React.useState(true)
 
   React.useEffect(() => {
-    tracksService.getAll()
+    tracksService.getAll(500)
       .then(r => setTracks(r.data))
       .catch(() => {})
       .finally(() => setLoading(false))

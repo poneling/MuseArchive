@@ -136,6 +136,48 @@ namespace MuseArchive.API.Controllers
             return Ok(tracks);
         }
 
+        // GET: api/Search/ByGenre?genre=Rock&limit=20
+        [HttpGet("ByGenre")]
+        public async Task<ActionResult<GenreResult>> SearchByGenre([FromQuery] string genre, [FromQuery] int limit = 20)
+        {
+            if (string.IsNullOrWhiteSpace(genre))
+                return BadRequest("Genre is required");
+
+            var tracks = await _context.Tracks
+                .Include(t => t.Album)
+                .ThenInclude(a => a.Artist)
+                .Include(t => t.TrackArtists)
+                .ThenInclude(ta => ta.Artist)
+                .Where(t => t.Genre != null && t.Genre.ToLower().Contains(genre.ToLower()))
+                .Take(Math.Min(limit, 100))
+                .ToListAsync();
+
+            // Artists whose genre matches OR whose tracks have matching genre
+            var artistsFromGenre = await _context.Artists
+                .Where(a => a.Genre != null && a.Genre.ToLower().Contains(genre.ToLower()))
+                .Take(limit)
+                .ToListAsync();
+
+            var artistsFromTracks = await _context.Artists
+                .Where(a => a.TrackArtists.Any(ta =>
+                    ta.Track.Genre != null && ta.Track.Genre.ToLower().Contains(genre.ToLower())))
+                .Take(limit)
+                .ToListAsync();
+
+            // Merge and deduplicate
+            var allArtists = artistsFromGenre
+                .Union(artistsFromTracks, ArtistIdComparer.Instance)
+                .Take(limit)
+                .ToList();
+
+            return Ok(new GenreResult
+            {
+                Tracks  = tracks,
+                Artists = allArtists,
+                Genre   = genre,
+            });
+        }
+
         // GET: api/Search/Playlists?q=query
         [HttpGet("Playlists")]
         public async Task<ActionResult<IEnumerable<Playlist>>> SearchPlaylists([FromQuery] string q, [FromQuery] int limit = 20)
@@ -166,5 +208,19 @@ namespace MuseArchive.API.Controllers
         public List<Track> Tracks { get; set; } = new();
         public List<Playlist> Playlists { get; set; } = new();
         public int TotalResults { get; set; }
+    }
+
+    public class GenreResult
+    {
+        public string Genre { get; set; } = string.Empty;
+        public List<Track> Tracks { get; set; } = new();
+        public List<Artist> Artists { get; set; } = new();
+    }
+
+    internal sealed class ArtistIdComparer : IEqualityComparer<Artist>
+    {
+        public static readonly ArtistIdComparer Instance = new();
+        public bool Equals(Artist? x, Artist? y) => x?.Id == y?.Id;
+        public int GetHashCode(Artist obj) => obj.Id.GetHashCode();
     }
 }

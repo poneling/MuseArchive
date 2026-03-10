@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { authService } from '../services/api'
 
 export interface Track {
   id: number
@@ -11,6 +12,16 @@ export interface Track {
   duration: string
   audioUrl?: string
   genre?: string
+}
+
+// Raw API shapes (minimal, only what Home needs for cache)
+export interface RawTrack {
+  id: number; title: string; duration: string; audioUrl?: string; genre?: string
+  album: { id: number; title: string; artist: { id: number; name: string } }
+}
+export interface RawAlbum {
+  id: number; title: string; coverImageUrl?: string
+  artist: { id: number; name: string }
 }
 
 interface MusicStore {
@@ -28,6 +39,11 @@ interface MusicStore {
   // ── Favorites ────────────────────────────────────────────────────────────
   favorites: number[]
 
+  // ── API Cache (NOT persisted — session memory only) ───────────────────────
+  cachedTracks: RawTrack[]
+  cachedAlbums: RawAlbum[]
+  isInitialLoaded: boolean
+
   // ── Actions ──────────────────────────────────────────────────────────────
   playTrack: (track: Track, queue?: Track[]) => void
   togglePlayPause: () => void
@@ -38,7 +54,10 @@ interface MusicStore {
   setProgress: (p: number) => void
   toggleFavorite: (trackId: number) => void
   isFavorite: (trackId: number) => boolean
+  setFavorites: (ids: number[]) => void
   setQueue: (tracks: Track[]) => void
+  setCachedData: (tracks: RawTrack[], albums: RawAlbum[]) => void
+  clearCache: () => void
 }
 
 const MAX_RECENT = 30
@@ -54,6 +73,9 @@ export const useMusicStore = create<MusicStore>()(
       progress: 0,
       recentlyPlayed: [],
       favorites: [],
+      cachedTracks: [],
+      cachedAlbums: [],
+      isInitialLoaded: false,
 
       playTrack: (track, queue) => {
         const q = queue ?? get().queue
@@ -97,10 +119,15 @@ export const useMusicStore = create<MusicStore>()(
       shufflePlay: () => {
         const { queue } = get()
         if (!queue.length) return
-        const idx = Math.floor(Math.random() * queue.length)
-        const track = queue[idx]
+        // Fisher-Yates shuffle
+        const shuffled = [...queue]
+        for (let i = shuffled.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+        }
+        const track = shuffled[0]
         const recent = [track, ...get().recentlyPlayed.filter(t => t.id !== track.id)].slice(0, MAX_RECENT)
-        set({ currentTrack: track, queueIndex: idx, isPlaying: true, progress: 0, recentlyPlayed: recent })
+        set({ currentTrack: track, queue: shuffled, queueIndex: 0, isPlaying: true, progress: 0, recentlyPlayed: recent })
       },
 
       setVolume: (v) => set({ volume: Math.min(1, Math.max(0, v)) }),
@@ -108,16 +135,29 @@ export const useMusicStore = create<MusicStore>()(
 
       toggleFavorite: (trackId) => {
         const favs = get().favorites
-        set({
-          favorites: favs.includes(trackId)
-            ? favs.filter(id => id !== trackId)
-            : [...favs, trackId],
-        })
+        const isLiked = favs.includes(trackId)
+        // Optimistic local update
+        set({ favorites: isLiked ? favs.filter(id => id !== trackId) : [...favs, trackId] })
+        // Sync with server if authenticated
+        try {
+          const raw = localStorage.getItem('musearchive-auth')
+          const isAuth = raw ? JSON.parse(raw)?.state?.isAuthenticated : false
+          if (isAuth) {
+            if (isLiked) authService.removeFavorite(trackId).catch(() => {})
+            else authService.addFavorite(trackId).catch(() => {})
+          }
+        } catch { /* ignore */ }
       },
+
+      setFavorites: (ids) => set({ favorites: ids }),
 
       isFavorite: (trackId) => get().favorites.includes(trackId),
 
       setQueue: (tracks) => set({ queue: tracks }),
+
+      setCachedData: (tracks, albums) => set({ cachedTracks: tracks, cachedAlbums: albums, isInitialLoaded: true }),
+
+      clearCache: () => set({ cachedTracks: [], cachedAlbums: [], isInitialLoaded: false }),
     }),
     {
       name: 'musearchive-store',

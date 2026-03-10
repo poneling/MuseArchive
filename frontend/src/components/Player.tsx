@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Repeat, Shuffle, Heart } from 'lucide-react'
 import { useMusicStore } from '../store/musicStore'
+import { tracksService } from '../services/api'
 
 const Player: React.FC = () => {
   const audioRef = useRef<HTMLAudioElement>(null)
@@ -31,6 +32,10 @@ const Player: React.FC = () => {
     setAudioDuration(0)
     audio.load()
     if (isPlaying) audio.play().catch(() => {})
+    // Increment play count when a new track starts
+    if (currentTrack?.id) {
+      tracksService.incrementPlayCount(currentTrack.id).catch(() => {})
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentTrack?.id])
 

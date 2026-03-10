@@ -1,20 +1,11 @@
 import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { Play, Heart, Disc3, Music } from 'lucide-react'
+import { Play, Heart, Disc3, Music, RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { tracksService, albumsService } from '../services/api'
-import { useMusicStore, Track } from '../store/musicStore'
+import { useMusicStore, Track, RawTrack, RawAlbum } from '../store/musicStore'
 
-interface ApiTrack {
-  id: number; title: string; duration: string; audioUrl?: string; genre?: string
-  album: { id: number; title: string; artist: { id: number; name: string } }
-}
-interface ApiAlbum {
-  id: number; title: string; coverImageUrl?: string
-  artist: { id: number; name: string }
-}
-
-const mapTrack = (t: ApiTrack): Track => ({
+const mapTrack = (t: RawTrack): Track => ({
   id: t.id, title: t.title,
   artist: t.album?.artist?.name ?? 'Unknown Artist',
   artistId: t.album?.artist?.id,
@@ -23,33 +14,54 @@ const mapTrack = (t: ApiTrack): Track => ({
   duration: t.duration ?? '', audioUrl: t.audioUrl, genre: t.genre,
 })
 
+// ── Skeleton components ──────────────────────────────────────────────────────
+const SkeletonCard = () => (
+  <div className="bg-zinc-900 rounded-lg p-4 animate-pulse">
+    <div className="aspect-square bg-zinc-700 rounded mb-3" />
+    <div className="h-3.5 bg-zinc-700 rounded w-3/4 mb-2" />
+    <div className="h-3 bg-zinc-800 rounded w-1/2" />
+  </div>
+)
+
+const SkeletonRow = () => (
+  <div className="flex items-center gap-3 rounded-md overflow-hidden bg-zinc-800 h-12 animate-pulse">
+    <div className="w-12 h-12 bg-zinc-700 flex-shrink-0" />
+    <div className="flex-1 h-3 bg-zinc-700 rounded mr-4" />
+  </div>
+)
+
 const Home: React.FC = () => {
   const { t } = useTranslation()
   const hour = new Date().getHours()
   const greeting = t(hour < 12 ? 'home.goodMorning' : hour < 17 ? 'home.goodAfternoon' : 'home.goodEvening')
-  const [allTracks, setAllTracks]   = useState<ApiTrack[]>([])
-  const [albums, setAlbums]         = useState<ApiAlbum[]>([])
-  const [loading, setLoading]       = useState(true)
 
-  const { recentlyPlayed, favorites, playTrack, currentTrack, isPlaying, toggleFavorite, isFavorite } = useMusicStore()
+  const {
+    recentlyPlayed, favorites, playTrack, currentTrack, isPlaying,
+    toggleFavorite, isFavorite,
+    cachedTracks, cachedAlbums, isInitialLoaded, setCachedData, clearCache,
+  } = useMusicStore()
+
+  const [loading, setLoading] = useState(!isInitialLoaded)
 
   useEffect(() => {
+    if (isInitialLoaded) return          // already have data — skip fetch
     const load = async () => {
+      setLoading(true)
       try {
         const [tr, al] = await Promise.all([tracksService.getAll(), albumsService.getAll()])
-        setAllTracks(tr.data)
-        setAlbums(al.data)
+        setCachedData(tr.data as RawTrack[], al.data as RawAlbum[])
       } catch { /* silent */ }
       finally { setLoading(false) }
     }
     load()
-  }, [])
+  }, [isInitialLoaded])                  // re-run only when cache is cleared
 
-  if (loading) return (
-    <div className="flex items-center justify-center h-64">
-      <div className="text-zinc-400 text-lg">{t('home.loading')}</div>
-    </div>
-  )
+  const handleRefresh = () => {
+    clearCache()                          // triggers useEffect to re-fetch
+  }
+
+  const allTracks = cachedTracks
+  const albums    = cachedAlbums
 
   const mappedAll = allTracks.map(mapTrack)
   const quickPicks = (recentlyPlayed.length > 0 ? recentlyPlayed : mappedAll).slice(0, 8)
@@ -65,15 +77,17 @@ const Home: React.FC = () => {
         onDoubleClick={() => playTrack(track, queue)}
       >
         <div className="aspect-square bg-zinc-700 rounded mb-3 flex items-center justify-center relative overflow-hidden">
-          <Music className="w-10 h-10 text-zinc-500" />
-          <button
-            onClick={() => playTrack(track, queue)}
-            className="absolute inset-0 m-auto w-10 h-10 bg-green-500 rounded-full items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity flex shadow-lg"
-          >
-            {active && isPlaying
-              ? <span className="text-black text-xs">⏸</span>
-              : <Play className="w-4 h-4 text-black ml-0.5" />}
-          </button>
+          <Music className="w-10 h-10 text-zinc-500 pointer-events-none" />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <button
+              onClick={e => { e.stopPropagation(); playTrack(track, queue) }}
+              className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
+            >
+              {active && isPlaying
+                ? <span className="text-black text-xs">⏸</span>
+                : <Play className="w-4 h-4 text-black ml-0.5" />}
+            </button>
+          </div>
         </div>
         <p className={`text-sm font-semibold truncate ${active ? 'text-green-400' : 'text-white'}`}>
           {track.title}
@@ -114,11 +128,37 @@ const Home: React.FC = () => {
     )
   }
 
+  if (loading) return (
+    <div className="space-y-10 -mt-4">
+      <div className="bg-gradient-to-b from-green-900/60 to-transparent -mx-8 -mt-4 px-8 pt-8 pb-6">
+        <div className="h-9 bg-zinc-700 rounded w-64 mb-5 animate-pulse" />
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+          {Array.from({ length: 8 }).map((_, i) => <SkeletonRow key={i} />)}
+        </div>
+      </div>
+      <section>
+        <div className="h-7 bg-zinc-800 rounded w-40 mb-4 animate-pulse" />
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+          {Array.from({ length: 10 }).map((_, i) => <SkeletonCard key={i} />)}
+        </div>
+      </section>
+    </div>
+  )
+
   return (
     <div className="space-y-10 -mt-4">
       {/* ── Hero ── */}
       <div className="bg-gradient-to-b from-green-900/60 to-transparent -mx-8 -mt-4 px-8 pt-8 pb-6">
-        <h1 className="text-3xl font-extrabold text-white mb-5">{greeting}</h1>
+        <div className="flex items-center justify-between mb-5">
+          <h1 className="text-3xl font-extrabold text-white">{greeting}</h1>
+          <button
+            onClick={handleRefresh}
+            title="Yenile"
+            className="text-zinc-500 hover:text-white transition-colors"
+          >
+            <RefreshCw className="w-4 h-4" />
+          </button>
+        </div>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
           {quickPicks.map(track => (
             <QuickPickRow key={track.id} track={track} queue={quickPicks} />

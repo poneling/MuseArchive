@@ -20,18 +20,46 @@ public class ArtistWikiService
         _logger  = logger;
     }
 
+    // Common genre keywords to detect from bio text
+    private static readonly string[] GenreKeywords =
+    {
+        "hip hop", "hip-hop", "rap", "trap",
+        "pop", "synth-pop", "electropop",
+        "rock", "alternative rock", "indie rock", "hard rock", "punk rock", "post-punk",
+        "electronic", "electronica", "electro", "techno", "house", "ambient", "synth",
+        "jazz", "blues", "soul", "r&b", "rnb", "rhythm and blues",
+        "metal", "heavy metal", "death metal",
+        "classical", "orchestral",
+        "country", "folk", "bluegrass",
+        "reggae", "dancehall", "latin", "bossa nova",
+        "indie", "alternative", "dream pop", "shoegaze",
+        "industrial", "noise", "experimental",
+    };
+
     /// <summary>
     /// Returns bio for the artist. Uses DB cache; fetches from Wikipedia if empty.
+    /// Also detects and stores genre from bio text.
     /// </summary>
     public async Task<string?> GetOrFetchBioAsync(int artistId)
     {
         var artist = await _context.Artists.FindAsync(artistId);
         if (artist == null) return null;
 
-        // Return cached bio if it already looks like real content (not the default placeholder)
-        if (!string.IsNullOrWhiteSpace(artist.Bio)
-            && !artist.Bio.StartsWith("Biography of ", StringComparison.OrdinalIgnoreCase))
+        var hasBio = !string.IsNullOrWhiteSpace(artist.Bio)
+                     && !artist.Bio.StartsWith("Biography of ", StringComparison.OrdinalIgnoreCase);
+
+        if (hasBio)
         {
+            // Try to detect genre from existing bio if not set
+            if (string.IsNullOrWhiteSpace(artist.Genre))
+            {
+                var detectedGenre = DetectGenreFromText(artist.Bio!);
+                if (detectedGenre != null)
+                {
+                    artist.Genre = detectedGenre;
+                    await _context.SaveChangesAsync();
+                }
+            }
             return artist.Bio;
         }
 
@@ -40,11 +68,51 @@ public class ArtistWikiService
         if (!string.IsNullOrWhiteSpace(bio))
         {
             artist.Bio = bio;
+            // Detect genre from fetched bio
+            var detectedGenre = DetectGenreFromText(bio);
+            if (detectedGenre != null && string.IsNullOrWhiteSpace(artist.Genre))
+                artist.Genre = detectedGenre;
+
             await _context.SaveChangesAsync();
-            _logger.LogInformation("Fetched Wikipedia bio for {Artist}", artist.Name);
+            _logger.LogInformation("Fetched Wikipedia bio for {Artist}, genre: {Genre}", artist.Name, artist.Genre);
         }
 
         return bio ?? artist.Bio;
+    }
+
+    /// <summary>
+    /// Detects primary genre from free-form text (bio, description).
+    /// Returns a normalized genre name or null if nothing found.
+    /// </summary>
+    public static string? DetectGenreFromText(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+        var lower = text.ToLowerInvariant();
+
+        foreach (var kw in GenreKeywords)
+        {
+            if (lower.Contains(kw))
+            {
+                // Map keywords to canonical genre names shown in Search.tsx
+                return kw switch
+                {
+                    "hip hop" or "hip-hop" or "rap" or "trap" => "Hip Hop",
+                    "pop" or "electropop" or "synth-pop"       => "Pop",
+                    "rock" or "alternative rock" or "indie rock"
+                        or "hard rock" or "punk rock" or "post-punk" => "Rock",
+                    "jazz"                                     => "Jazz",
+                    "electronic" or "electronica" or "electro"
+                        or "techno" or "house" or "ambient"
+                        or "synth"                             => "Electronic",
+                    "r&b" or "rnb" or "rhythm and blues"
+                        or "soul"                              => "R&B",
+                    "classical" or "orchestral"                => "Classical",
+                    "country" or "folk" or "bluegrass"         => "Country",
+                    _                                          => null,
+                };
+            }
+        }
+        return null;
     }
 
     private async Task<string?> FetchWikipediaSummaryAsync(string artistName)

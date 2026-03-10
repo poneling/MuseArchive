@@ -22,8 +22,9 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddDbContext<MuseArchiveDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// Add Music Library Scanner as scoped service
+// Add Music Library Scanner and Duplicate Cleanup as scoped services
 builder.Services.AddScoped<MusicLibraryScanner>();
+builder.Services.AddScoped<DuplicateCleanupService>();
 
 // Add HttpClient for external API calls (Wikipedia)
 builder.Services.AddHttpClient();
@@ -84,13 +85,20 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-// Apply pending EF migrations and scan music library on startup
+// Startup: migrate → clean duplicates → scan
 using (var scope = app.Services.CreateScope())
 {
-    var db = scope.ServiceProvider.GetRequiredService<MuseArchiveDbContext>();
+    var db      = scope.ServiceProvider.GetRequiredService<MuseArchiveDbContext>();
+    var cleanup = scope.ServiceProvider.GetRequiredService<DuplicateCleanupService>();
+    var scanner = scope.ServiceProvider.GetRequiredService<MusicLibraryScanner>();
+
+    // 1. Apply pending EF migrations (creates DB + tables if needed)
     await db.Database.MigrateAsync();
 
-    var scanner = scope.ServiceProvider.GetRequiredService<MusicLibraryScanner>();
+    // 2. Remove duplicate artists/albums (safe now that DB exists)
+    await cleanup.CleanDuplicatesAsync();
+
+    // 3. Scan music library
     await scanner.ScanAndImportMusicLibraryAsync();
 }
 

@@ -1,7 +1,9 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using MuseArchive.API.Data;
 using MuseArchive.API.Models;
+using System.Security.Claims;
 
 namespace MuseArchive.API.Controllers
 {
@@ -66,9 +68,25 @@ namespace MuseArchive.API.Controllers
         }
 
         // POST: api/Playlists
+        [Authorize]
         [HttpPost]
-        public async Task<ActionResult<Playlist>> CreatePlaylist(Playlist playlist)
+        public async Task<ActionResult<Playlist>> CreatePlaylist([FromBody] CreatePlaylistDto dto)
         {
+            // Prefer JWT-derived userId; fall back to body value for unauthenticated dev usage
+            var idClaim  = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            var userId   = int.TryParse(idClaim, out var uid) ? uid : dto.CreatedByUserId;
+
+            if (userId == 0)
+                return Unauthorized(new { message = "User not identified." });
+
+            var playlist = new Playlist
+            {
+                Name              = dto.Name?.Trim() ?? "New Playlist",
+                Description       = dto.Description,
+                IsPublic          = dto.IsPublic ?? false,
+                CreatedByUserId   = userId,
+            };
+
             _context.Playlists.Add(playlist);
             await _context.SaveChangesAsync();
 
@@ -76,37 +94,26 @@ namespace MuseArchive.API.Controllers
         }
 
         // PUT: api/Playlists/5
+        [Authorize]
         [HttpPut("{id}")]
-        public async Task<IActionResult> UpdatePlaylist(int id, Playlist playlist)
+        public async Task<IActionResult> UpdatePlaylist(int id, [FromBody] UpdatePlaylistDto dto)
         {
-            if (id != playlist.Id)
-            {
-                return BadRequest();
-            }
+            var playlist = await _context.Playlists.FindAsync(id);
+            if (playlist == null) return NotFound();
+
+            if (!string.IsNullOrWhiteSpace(dto.Name))
+                playlist.Name = dto.Name.Trim();
+            if (dto.Description != null)
+                playlist.Description = dto.Description;
 
             playlist.UpdatedAt = DateTime.UtcNow;
-            _context.Entry(playlist).State = EntityState.Modified;
-
-            try
-            {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!PlaylistExists(id))
-                {
-                    return NotFound();
-                }
-                else
-                {
-                    throw;
-                }
-            }
+            await _context.SaveChangesAsync();
 
             return NoContent();
         }
 
         // DELETE: api/Playlists/5
+        [Authorize]
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeletePlaylist(int id)
         {
@@ -123,6 +130,7 @@ namespace MuseArchive.API.Controllers
         }
 
         // POST: api/Playlists/5/AddTrack
+        [Authorize]
         [HttpPost("{playlistId}/AddTrack")]
         public async Task<ActionResult<PlaylistTrack>> AddTrackToPlaylist(int playlistId, [FromBody] PlaylistTrackRequest request)
         {
@@ -167,6 +175,7 @@ namespace MuseArchive.API.Controllers
         }
 
         // DELETE: api/Playlists/5/RemoveTrack/6
+        [Authorize]
         [HttpDelete("{playlistId}/RemoveTrack/{trackId}")]
         public async Task<IActionResult> RemoveTrackFromPlaylist(int playlistId, int trackId)
         {
@@ -205,5 +214,19 @@ namespace MuseArchive.API.Controllers
     {
         public int TrackId { get; set; }
         public int? AddedByUserId { get; set; }
+    }
+
+    public class CreatePlaylistDto
+    {
+        public string? Name { get; set; }
+        public string? Description { get; set; }
+        public bool? IsPublic { get; set; }
+        public int CreatedByUserId { get; set; }
+    }
+
+    public class UpdatePlaylistDto
+    {
+        public string? Name { get; set; }
+        public string? Description { get; set; }
     }
 }

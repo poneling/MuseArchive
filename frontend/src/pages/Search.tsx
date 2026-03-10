@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { Search as SearchIcon, Music, User, Disc3, Play, Loader2, Heart } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { searchService, tracksService } from '../services/api'
+import { searchService } from '../services/api'
 import { useMusicStore, Track } from '../store/musicStore'
 
 interface ApiTrack {
@@ -52,11 +52,12 @@ const formatTime = (ts: string | undefined) => {
 
 const Search: React.FC = () => {
   const { t } = useTranslation()
-  const [query, setQuery]           = useState('')
-  const [results, setResults]       = useState<SearchResults | null>(null)
+  const [query, setQuery]             = useState('')
+  const [results, setResults]         = useState<SearchResults | null>(null)
   const [genreTracks, setGenreTracks] = useState<ApiTrack[] | null>(null)
+  const [genreArtists, setGenreArtists] = useState<ApiArtist[]>([])
   const [activeGenre, setActiveGenre] = useState<string | null>(null)
-  const [loading, setLoading]       = useState(false)
+  const [loading, setLoading]         = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const { playTrack, currentTrack, isPlaying, toggleFavorite, isFavorite } = useMusicStore()
@@ -85,14 +86,21 @@ const Search: React.FC = () => {
 
   // ── Genre click ──────────────────────────────────────────────────────────
   const handleGenre = async (genre: string) => {
-    if (activeGenre === genre) { setActiveGenre(null); setGenreTracks(null); return }
+    if (activeGenre === genre) {
+      setActiveGenre(null)
+      setGenreTracks(null)
+      setGenreArtists([])
+      return
+    }
     setActiveGenre(genre)
     setLoading(true)
     try {
-      const res = await tracksService.getByGenre(genre)
-      setGenreTracks(res.data)
+      const res = await searchService.searchByGenre(genre, 30)
+      setGenreTracks(res.data.tracks ?? [])
+      setGenreArtists(res.data.artists ?? [])
     } catch {
       setGenreTracks([])
+      setGenreArtists([])
     } finally {
       setLoading(false)
     }
@@ -268,8 +276,8 @@ const Search: React.FC = () => {
 
       {/* Genre results */}
       {activeGenre && genreTracks !== null && !query && (
-        <section>
-          <div className="flex items-center justify-between mb-3">
+        <section className="space-y-6">
+          <div className="flex items-center justify-between">
             <h2 className="text-xl font-bold text-white">{activeGenre}</h2>
             {genreTracks.length > 0 && (
               <button
@@ -280,13 +288,42 @@ const Search: React.FC = () => {
               </button>
             )}
           </div>
-          {genreTracks.length === 0
-            ? <p className="text-zinc-400">No tracks found for this genre.</p>
-            : <div className="space-y-1">
-                {genreTracks.map(gt => (
-                  <TrackRow key={gt.id} track={gt} queue={genreTracks} />
+
+          {/* Genre artists */}
+          {genreArtists.length > 0 && (
+            <div>
+              <h3 className="text-base font-semibold text-zinc-300 mb-3">Artists</h3>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                {genreArtists.map(a => (
+                  <Link
+                    key={a.id}
+                    to={`/artist/${a.id}`}
+                    className="bg-zinc-800 rounded-lg p-4 hover:bg-zinc-700 transition-colors text-center"
+                  >
+                    <div className="w-14 h-14 bg-zinc-600 rounded-full mx-auto mb-2 flex items-center justify-center">
+                      <User className="w-6 h-6 text-zinc-400" />
+                    </div>
+                    <p className="text-white text-sm font-semibold truncate">{a.name}</p>
+                    <p className="text-zinc-400 text-xs mt-0.5">Artist</p>
+                  </Link>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Genre tracks */}
+          {genreTracks.length === 0 && genreArtists.length === 0
+            ? <p className="text-zinc-400">Bu türde içerik bulunamadı.</p>
+            : genreTracks.length > 0 && (
+                <div>
+                  <h3 className="text-base font-semibold text-zinc-300 mb-3">Songs</h3>
+                  <div className="space-y-1">
+                    {genreTracks.map(gt => (
+                      <TrackRow key={gt.id} track={gt} queue={genreTracks} />
+                    ))}
+                  </div>
+                </div>
+              )
           }
         </section>
       )}
