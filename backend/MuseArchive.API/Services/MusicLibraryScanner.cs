@@ -16,7 +16,17 @@ public class MusicLibraryScanner
     {
         _context = context;
         _logger = logger;
-        _musicPath = @"C:\Users\poneling\Desktop\proje\music";
+        
+        // Use project root directory (one level above backend) to find music folder
+        var projectRoot = Directory.GetParent(env.ContentRootPath)?.FullName ?? env.ContentRootPath;
+        _musicPath = Path.Combine(projectRoot, "music");
+        
+        // Ensure music directory exists
+        if (!Directory.Exists(_musicPath))
+        {
+            Directory.CreateDirectory(_musicPath);
+            _logger.LogInformation("Created music directory: {Path}", _musicPath);
+        }
     }
 
     // ─── PUBLIC ENTRY POINT ──────────────────────────────────────────────────
